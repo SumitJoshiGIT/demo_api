@@ -42,6 +42,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [taskFilter, setTaskFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewMode, setViewMode] = useState("board");
 
   const isAuthenticated = useMemo(() => Boolean(token), [token]);
 
@@ -63,6 +64,21 @@ function App() {
       return matchesStatus && matchesSearch;
     });
   }, [tasks, taskFilter, searchTerm]);
+
+  const groupedTasks = useMemo(() => {
+    return filteredTasks.reduce(
+      (acc, task) => {
+        acc[task.status]?.push(task);
+        return acc;
+      },
+      { todo: [], "in-progress": [], done: [] }
+    );
+  }, [filteredTasks]);
+
+  const completionRate = useMemo(() => {
+    if (stats.total === 0) return 0;
+    return Math.round((stats.done / stats.total) * 100);
+  }, [stats]);
 
   const showMessage = (type, text) => {
     setMessage({ type, text });
@@ -205,8 +221,8 @@ function App() {
     <main className="app-shell">
       <header className="topbar">
         <div className="brand-block">
-          <p className="eyebrow">PrimeTrade Assignment</p>
-          <h1>Task Management Console</h1>
+          <h1>Taskboard</h1>
+          
         </div>
         <p className="api-pill">API: {API_BASE}</p>
       </header>
@@ -219,18 +235,7 @@ function App() {
 
       {!isAuthenticated ? (
         <section className="auth-layout">
-          <article className="auth-hero panel">
-            <h2>Secure, role-aware backend demo</h2>
-            <p>
-              Authenticate with JWT, manage protected task data, and demonstrate API quality with a clean,
-              product-like workflow.
-            </p>
-            <ul>
-              <li>Token-based authentication</li>
-              <li>Role-based API access</li>
-              <li>Real-time CRUD interactions</li>
-            </ul>
-          </article>
+
 
           <article className="auth-form panel">
             <div className="tabs">
@@ -292,11 +297,17 @@ function App() {
             <div>
               <p className="eyebrow">Signed in as</p>
               <h2>{user?.name}</h2>
-              <p className="muted">{user?.email} · {user?.role}</p>
+              <p className="muted">{user?.email}</p>
+              <span className="role-pill">{user?.role}</span>
             </div>
-            <button className="btn" onClick={handleLogout}>
-              Logout
-            </button>
+            <div className="summary-actions">
+              <button className="btn btn-ghost" onClick={fetchTasks}>
+                Sync
+              </button>
+              <button className="btn" onClick={handleLogout}>
+                Logout
+              </button>
+            </div>
           </article>
 
           <article className="stats-grid">
@@ -316,10 +327,17 @@ function App() {
               <p>Done</p>
               <strong>{stats.done}</strong>
             </div>
+            <div className="stat-card progress-card">
+              <p>Completion</p>
+              <strong>{completionRate}%</strong>
+              <div className="progress-bar">
+                <span style={{ width: `${completionRate}%` }} />
+              </div>
+            </div>
           </article>
 
           <div className="workspace-grid">
-            <article className="panel">
+            <article className="panel create-panel">
               <div className="section-head">
                 <h3>{editingTaskId ? "Edit Task" : "Create Task"}</h3>
                 {editingTaskId && (
@@ -382,6 +400,22 @@ function App() {
                       </option>
                     ))}
                   </select>
+                  <div className="view-toggle">
+                    <button
+                      type="button"
+                      className={viewMode === "board" ? "active" : ""}
+                      onClick={() => setViewMode("board")}
+                    >
+                      Board
+                    </button>
+                    <button
+                      type="button"
+                      className={viewMode === "list" ? "active" : ""}
+                      onClick={() => setViewMode("list")}
+                    >
+                      List
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -392,7 +426,7 @@ function App() {
                   <h4>No tasks found</h4>
                   <p className="muted">Create a task or adjust your search/filter criteria.</p>
                 </div>
-              ) : (
+              ) : viewMode === "list" ? (
                 <ul className="tasks">
                   {filteredTasks.map((task) => (
                     <li key={task._id} className="task-card">
@@ -415,6 +449,41 @@ function App() {
                     </li>
                   ))}
                 </ul>
+              ) : (
+                <div className="board">
+                  {Object.entries(groupedTasks).map(([status, items]) => (
+                    <div key={status} className="board-column">
+                      <div className="board-head">
+                        <h4>{humanizeStatus(status)}</h4>
+                        <span>{items.length}</span>
+                      </div>
+                      {items.length === 0 ? (
+                        <p className="muted">No tasks</p>
+                      ) : (
+                        items.map((task) => (
+                          <div key={task._id} className="board-card">
+                            <div className="task-top-row">
+                              <strong>{task.title}</strong>
+                              <span className={`status-badge status-${task.status}`}>
+                                {humanizeStatus(task.status)}
+                              </span>
+                            </div>
+                            <p>{task.description || "No description provided."}</p>
+                            <small className="muted">Updated {formatDate(task.updatedAt || task.createdAt)}</small>
+                            <div className="action-row">
+                              <button className="btn btn-ghost" onClick={() => startEditTask(task)}>
+                                Edit
+                              </button>
+                              <button className="btn btn-danger" onClick={() => handleDeleteTask(task._id)}>
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </article>
           </div>
